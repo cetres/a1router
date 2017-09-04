@@ -16,4 +16,9 @@ A configuration file at ~/.a1router should be as follows:
 ip_Address: 192.168.0.1
 username: admin
 password: <insert_your_secret_password>
+assoc_event:
+  type: sqs
+  region: sa-east-1
+  queue: a1router
+  status: /var/run/a1router/rstatus.yaml
 ```

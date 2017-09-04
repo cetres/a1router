@@ -1,3 +1,4 @@
+# -*- coding: UTF-8 -*-
 import logging
 import argparse
 from a1router import Dlink

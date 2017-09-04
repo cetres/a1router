@@ -1,4 +1,6 @@
+# -*- coding: UTF-8 -*-
 import os
+import datetime
 import subprocess
 import socket
 import logging
@@ -8,6 +10,7 @@ from bs4 import BeautifulSoup
 
 
 CONFIG_FILE = "~/.a1router"
+STATUS_FILE = "/var/run/a1router/rstatus.yaml"
 
 
 class Router(object):
@@ -15,6 +18,7 @@ class Router(object):
     _config = { "ip_address": None,
                 "username": None,
                 "password": None}
+    _mq = None
     
     def __init__(self, ip_address=None, username=None, password=None, log_level=logging.INFO):
         global CONFIG_FILE
@@ -48,6 +52,13 @@ class Router(object):
         else:
             self._logger.critical("Router is dead - {}".format(self._ip_address))
             raise RuntimeError("Router is dead - {}".format(self._ip_address))
+        if self._config["assoc_event"].get("type"):
+            module_name="mq_%s" % self._config["assoc_event"]["type"]
+            self._logger.debug("Importing module %s" % module_name)
+            mq = __import__("a1router." + module_name, fromlist=[''])
+            print(mq)
+            self._mq = mq.MQ(self._config["assoc_event"])
+            
         
     def _ping(self, ip_address):
         self._logger.debug("Start ping to {}".format(ip_address))
@@ -64,6 +75,26 @@ class Router(object):
     def _auth(self):
         return (self._config["username"], self._config["password"])
 
+
+    def assoc_event(self, status):
+        now = datetime.datetime.now().strftime("%s")
+        for s,v in status.items():
+            status[s]["last_time"] = now
+        status_file = self._config["assoc_event"].get("status", STATUS_FILE)
+        if os.path.exists(status_file):
+            self._logger.info("Status file found. Reading...")
+            with open(status_file, 'r') as stream:
+                try:
+                    status_antigo = yaml.load(stream)
+                    status_antigo.update(status)
+                    status = status_antigo
+                except yaml.YAMLError as exc:
+                    logging.critical(exc)
+                    raise RuntimeError("Error while reading status file {}".format(status_file))
+        with open(status_file, 'w') as stream:
+            yaml.dump(status, stream, default_flow_style=False)
+                
+        
 
 
 class Dlink(Router):
@@ -90,4 +121,6 @@ class Dlink(Router):
                                         "ip_address": a.find("ip_address").text
                                       }
         self._logger.debug("Assoc found: {}".format(len(assoc)))
+        if self._config.get("assoc_event"):
+            self.assoc_event(assoc)
         return assoc
